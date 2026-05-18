@@ -1,41 +1,38 @@
 #!/bin/bash
-# สคริปต์ติดตั้ง Wan2GP อัตโนมัติสำหรับ Ubuntu (NVIDIA GPUs RTX 30XX - 50XX)
-# ขีดสุดของความเร็วโดยใช้ PyTorch 2.10 และ CUDA 13.0 ตามคำแนะนำของทีมพัฒนา
 
-set -e
+# ==============================================================================
+# Wan2GP Setup Script for Ubuntu 24.04 (RTX 5090 / Salad.com)
+# Optimized for Blackwell Architecture (PyTorch 2.10 + CUDA 13.0 + Python 3.11)
+# ==============================================================================
 
-echo "================================================="
-echo "   🚀 เริ่มต้นกระบวนการติดตั้ง Wan2GP สำหรับ Ubuntu"
-echo "================================================="
+set -e # หยุดการทำงานทันทีหากมี Error เกิดขึ้น
 
-# 1. อัปเดตและติดตั้ง System Dependencies พื้นฐาน
-echo -e "\n[1/6] กำลังอัปเดตระบบและติดตั้งแพ็กเกจพื้นฐาน..."
-sudo apt update -y
-sudo apt install -y git wget curl libgl1 libglib2.0-0 build-essential
+echo "🚀 Starting Wan2GP installation for RTX 5090..."
 
-# 2. ตรวจสอบและติดตั้ง Miniconda (ถ้ายังไม่มีในระบบ)
-echo -e "\n[2/6] ตรวจสอบสภาพแวดล้อม Conda..."
-if ! command -v conda &> /dev/null
-then
-    echo ">>> ไม่พบ Conda กำลังดาวน์โหลดและติดตั้ง Miniconda..."
-    wget [https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh) -O miniconda.sh
-    bash miniconda.sh -b -p $HOME/miniconda3
-    rm miniconda.sh
-    # กำหนด Path ชั่วคราวสำหรับรันสคริปต์
-    export PATH="$HOME/miniconda3/bin:$PATH"
-    eval "$($HOME/miniconda3/bin/conda shell.bash hook)"
-    conda init
+# 1. อัปเดตระบบและติดตั้ง Dependencies พื้นฐาน (รวมถึง FFmpeg สำหรับประมวลผลวิดีโอ)
+echo "📦 Installing system dependencies (ffmpeg, git, curl, wget, etc.)..."
+sudo apt update && sudo apt install -y git curl wget build-essential ffmpeg libsm6 libxext6 libgl1
+
+# 2. ติดตั้ง Miniconda (ข้ามขั้นตอนนี้หากระบบมี Conda อยู่แล้ว)
+if ! command -v conda &> /dev/null; then
+    echo "🐍 Miniconda not found. Installing Miniconda..."
+    mkdir -p ~/miniconda3
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+    bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+    rm ~/miniconda3/miniconda.sh
+    source ~/miniconda3/bin/activate
+    conda init --all
 else
-    echo ">>> ตรวจพบ Conda ในระบบแล้ว"
-    eval "$(conda shell.bash hook)"
+    echo "✅ Miniconda is already installed."
+    source $(conda info --base)/etc/profile.d/conda.sh
 fi
 
-# 3. โคลน Repository Wan2GP จาก GitHub
-echo -e "\n[3/6] กำลังดาวน์โหลด Wan2GP Source Code..."
+# 3. โคลน Repository ของ Wan2GP
 if [ ! -d "Wan2GP" ]; then
-    git clone [https://github.com/deepbeepmeep/Wan2GP.git](https://github.com/deepbeepmeep/Wan2GP.git)
+    echo "📥 Cloning deepbeepmeep/Wan2GP repository..."
+    git clone https://github.com/deepbeepmeep/Wan2GP.git
 else
-    echo ">>> โฟลเดอร์ Wan2GP มีอยู่แล้ว กำลังอัปเดตเป็นเวอร์ชันล่าสุด..."
+    echo "⚠️ Wan2GP directory already exists. Pulling latest changes..."
     cd Wan2GP
     git pull
     cd ..
@@ -43,30 +40,24 @@ fi
 
 cd Wan2GP
 
-# 4. สร้างและเปิดใช้งาน Conda Environment
-echo -e "\n[4/6] กำลังสร้าง Conda Environment ชื่อ 'wan2gp' (Python 3.11.14)..."
+# 4. สร้างและเปิดใช้งาน Conda Environment (ใช้ Python 3.11.14 ตาม Official Recommendation)
+echo "🌐 Creating Conda environment 'wan2gp' with Python 3.11.14..."
 conda create -y -n wan2gp python=3.11.14
+source $(conda info --base)/etc/profile.d/conda.sh
 conda activate wan2gp
 
-# 5. ติดตั้ง PyTorch รุ่นล่าสุด (Torch 2.10 + CUDA 13.0)
-echo -e "\n[5/6] กำลังติดตั้ง PyTorch และระบบประมวลผล CUDA..."
-pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url [https://download.pytorch.org/whl/cu130](https://download.pytorch.org/whl/cu130)
+# 5. ติดตั้ง PyTorch 2.10 สำหรับ CUDA 13.0 (เหมาะที่สุดสำหรับ RTX 50XX)
+echo "🔥 Installing PyTorch 2.10 (CUDA 13.0)..."
+pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu130
 
-# 6. ติดตั้ง Requirements หลัก และไลบรารีเร่งความเร็ว
-echo -e "\n[6/6] กำลังติดตั้ง Dependencies จาก requirements.txt..."
+# 6. ติดตั้ง Requirements ของโปรเจกต์
+echo "📚 Installing Wan2GP Python requirements..."
 pip install -r requirements.txt
 
-# (Optional) ติดตั้ง Flash Attention ของ Linux เพื่อเพิ่มความเร็วในการ Generate
-echo ">>> กำลังพยายามติดตั้ง Flash Attention (อาจใช้เวลาคอมไพล์สักครู่)..."
-pip install flash-attn==2.7.2.post1 || echo "⚠️ คำเตือน: ติดตั้ง Flash Attention ไม่สำเร็จ แต่คุณยังสามารถใช้งาน Wan2GP ในโหมดปกติได้"
-
-echo "================================================="
-echo "   🎉 การติดตั้ง Wan2GP เสร็จสมบูรณ์แล้ว!"
-echo "================================================="
-echo ""
-echo "📌 วิธีการเรียกใช้งานโปรแกรมในครั้งต่อไป:"
-echo "1. รีสตาร์ท Terminal หรือรันคำสั่ง: source ~/.bashrc"
-echo "2. เปิดใช้งาน Environment:      conda activate wan2gp"
-echo "3. เข้าสู่โฟลเดอร์:              cd Wan2GP"
-echo "4. สั่งรัน WebUI:              python wgp.py (หรือตามสคริปต์รันของโปรเจกต์)"
-echo ""
+echo "🎉 Installation Complete!"
+echo "------------------------------------------------------"
+echo "คำสั่งสำหรับเริ่มต้นใช้งาน Wan2GP ในครั้งถัดไป:"
+echo "  conda activate wan2gp"
+echo "  cd ~/Wan2GP"
+echo "  python webui.py หรือรันสคริปต์เริ่มต้นของ Repo"
+echo "------------------------------------------------------"
